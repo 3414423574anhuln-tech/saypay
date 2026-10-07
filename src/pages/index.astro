@@ -19,6 +19,7 @@ const originMatches = configuredOrigin === Astro.url.origin;
   <p class="eyebrow">W1 · payment service verification</p>
   <h1>Create a sandbox order</h1>
   <p>Review these fields before submitting. This button creates a PayPal sandbox order; buyer approval happens on PayPal next.</p>
+  <p class="notice"><a href="/parse">Parse an English or Chinese payment intent</a> to inspect an unpaid draft. Parsing does not populate or submit this manual form.</p>
   {configurationError && <p class="error" role="alert">{configurationError}</p>}
   {!ready && <p class="notice" role="status"><strong>Credentials not configured.</strong> Fill <code>PAYPAL_CLIENT_ID</code> and <code>PAYPAL_CLIENT_SECRET</code> locally in this checkout’s <code>.env</code>. Do not send values through chat.</p>}
   {!originMatches && <p class="error" role="alert">Open this app at <a href={configuredOrigin}>{configuredOrigin}</a>. APP_URL must match the origin used for create, return, and cancel.</p>}

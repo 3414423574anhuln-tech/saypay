@@ -1,0 +1,48 @@
+---
+import Layout from '../components/Layout.astro';
+import DraftResult from '../components/DraftResult.astro';
+import '../styles/w2.css';
+import { AppError } from '../lib/errors';
+import { parsingRuntime } from '../lib/llm-runtime';
+import { parsingRequest } from '../lib/parsing-request';
+import type { ParseResult, ParsingInput } from '../lib/draft-types';
+const runtime = parsingRuntime();
+const configured = !!runtime.config.base && !!runtime.config.key && !!runtime.config.model;
+let input: ParsingInput = { intent: '', answers: [] };
+let result: ParseResult | undefined;
+let error: AppError | undefined;
+if (Astro.request.method === 'POST') {
+  try { input = await parsingRequest(Astro.request, runtime.appOrigin); result = await runtime.parse(input); }
+  catch (failure) { error = failure instanceof AppError ? failure : new AppError('AI parsing', 'INTERNAL_ERROR', 'The server could not parse this intent. No draft or payment was created.', 500); Astro.response.status = error.httpStatus; }
+}
+---
+<Layout title="Parse a payment intent">
+  <p class="eyebrow">W2 · intent parsing</p>
+  <h1>Describe a payment intent</h1>
+  <p>English or Chinese input produces a draft or a clarification question. Nothing on this page can initiate a payment.</p>
+  {!configured && <p class="notice">AI configuration · LLM_NOT_CONFIGURED: Fill LLM_API_BASE, LLM_API_KEY and LLM_MODEL locally in this checkout’s .env. Do not send values through chat.</p>}
+  {error && <div role="alert" class="error"><strong>{error.stage} · {error.code}</strong><p>{error.message}</p></div>}
+  {result?.kind === 'clarification' ? (
+    <section aria-labelledby="clarification-heading">
+      <p class="eyebrow">Clarification — no draft or payment created</p><h2 id="clarification-heading">More information is needed</h2>
+      <p id="clarification-question">{result.question}</p>
+      <p class="hint">Missing or ambiguous: {result.missing_fields.join(', ')}</p>
+      <p><strong>Original intent:</strong> {input.intent}</p>
+      {input.answers.length > 0 && <ol>{input.answers.map(answer => <li>{answer}</li>)}</ol>}
+      <form method="post" action="/parse">
+        <input type="hidden" name="intent" value={input.intent} /><input type="hidden" name="answers" value={JSON.stringify(input.answers)} />
+        <label for="answer">Clarification answer</label><textarea id="answer" name="answer" required maxlength="1000" rows="3" aria-describedby="clarification-question"></textarea>
+        <button type="submit" disabled={!configured || input.answers.length >= 8}>Re-parse intent with answer</button>
+      </form>
+      {input.answers.length >= 8 && <p class="notice">This request reached eight clarification answers. Start a new intent with the facts combined.</p>}
+      {result.injection_flags.length > 0 && <ul>{result.injection_flags.map(flag => <li>{flag.type}: <q>{flag.snippet}</q></li>)}</ul>}
+    </section>
+  ) : <section aria-labelledby="intent-heading"><h2 id="intent-heading">Payment intent</h2><form method="post" action="/parse">
+    <label for="intent">Intent in English or Chinese</label><textarea id="intent" name="intent" required maxlength="4000" rows="4">{input.intent}</textarea>
+    <p class="hint">Include who receives the payment, the exact amount and currency, and any purchase or note.</p>
+    <button type="submit" disabled={!configured}>Generate draft only</button>
+  </form></section>}
+  {result?.kind === 'draft' && <DraftResult draft={result.draft} />}
+  <p class="hint">Intent and answers travel in this form request. W2 does not save drafts or conversation history.</p>
+  <nav class="actions" aria-label="Parsing navigation"><a href="/parse">Start a new intent</a><a href="/">Manual sandbox form</a></nav>
+</Layout>

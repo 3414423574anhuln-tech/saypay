@@ -1,0 +1,3 @@
+textarea{width:100%;min-width:0;border:1px solid #aaa39a;background:white;padding:11px;font:inherit;border-radius:0;resize:vertical}
+textarea:focus-visible{outline:3px solid #946e89;outline-offset:3px}
+.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px;text-align:left}caption{text-align:left;font-weight:600;margin:16px 0 8px}th,td{padding:10px;border-bottom:1px solid #d8d3ca;overflow-wrap:anywhere}h3{font-size:14px}.draft-result>p{overflow-wrap:anywhere}

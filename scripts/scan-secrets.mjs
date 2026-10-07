@@ -7,7 +7,7 @@ const git = args => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 32 
 const findings = [];
 // Compare locally configured values in memory; never print them or scan .env as a publishable file.
 const localEnv = existsSync('.env') ? parseEnv(readFileSync('.env', 'utf8')) : {};
-const localSecrets = ['PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET'].map(name => localEnv[name]).filter(value => value?.trim());
+const localSecrets = ['PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET', 'LLM_API_KEY'].map(name => localEnv[name]).filter(value => value?.trim());
 const patterns = [
   ['PRIVATE_KEY', /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/],
   ['OPENAI_STYLE_KEY', /\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{20,}\b/],

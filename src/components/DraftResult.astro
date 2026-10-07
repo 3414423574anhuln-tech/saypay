@@ -1,0 +1,23 @@
+---
+import type { Draft } from '../lib/draft-types';
+interface Props { draft: Draft }
+const { draft } = Astro.props;
+---
+<section aria-labelledby="draft-heading" class="draft-result">
+  <p class="eyebrow">DRAFT — not paid</p>
+  <h2 id="draft-heading">Extracted draft</h2>
+  <p>This read-only draft cannot create or pay a PayPal order from this screen.</p>
+  <dl>
+    <dt>Payee name</dt><dd>{draft.payee.name || 'Not supplied'}</dd>
+    <dt>Payee email</dt><dd>{draft.payee.email || 'Not supplied — fill it at the later confirmation stage'}</dd>
+    <dt>Currency</dt><dd>{draft.currency}</dd>
+    <dt>Recomputed total</dt><dd id="draft-total">{draft.currency} {draft.total.toFixed(2)}</dd>
+    <dt>Note</dt><dd>{draft.note || 'None supplied'}</dd>
+    <dt>AI confidence</dt><dd>{draft.confidence} <span class="hint">(model estimate, not a guarantee)</span></dd>
+  </dl>
+  <div class="table-wrap"><table><caption>Line items</caption><thead><tr><th scope="col">Item</th><th scope="col">Quantity</th><th scope="col">Unit amount</th></tr></thead><tbody>
+    {draft.items.map(item => <tr><td>{item.name}</td><td>{item.quantity}</td><td>{draft.currency} {item.unit_amount.toFixed(2)}</td></tr>)}
+  </tbody></table></div>
+  {draft.ambiguities.length > 0 && <div class="notice"><h3>Uncertainty</h3><ul>{draft.ambiguities.map(value => <li>{value}</li>)}</ul></div>}
+  {draft.injection_flags.length > 0 && <div class="notice"><h3>Parsing detections</h3><ul>{draft.injection_flags.map(flag => <li><strong>{flag.type}</strong>: <q>{flag.snippet}</q></li>)}</ul></div>}
+</section>
