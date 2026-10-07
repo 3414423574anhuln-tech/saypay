@@ -1,0 +1,12 @@
+---
+import Layout from '../components/Layout.astro';
+const stage = (Astro.url.searchParams.get('stage') ?? 'request').slice(0, 100);
+const code = (Astro.url.searchParams.get('code') ?? 'REQUEST_FAILED').slice(0, 100);
+const message = (Astro.url.searchParams.get('message') ?? 'This step could not be completed.').slice(0, 700);
+---
+<Layout title="Order request failed">
+  <h1>Order request failed</h1>
+  <div class="error" role="alert"><strong>{stage} · {code}</strong><p>{message}</p></div>
+  <p>If a create request timed out, its result may be unknown. Inspect the sandbox dashboard before creating another order.</p>
+  <a href="/">Back to manual form</a>
+</Layout>

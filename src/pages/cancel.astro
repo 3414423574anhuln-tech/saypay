@@ -1,0 +1,16 @@
+---
+import Layout from '../components/Layout.astro';
+const candidate = Astro.url.searchParams.get('token');
+const token = candidate && /^[A-Za-z0-9]{1,64}$/.test(candidate) ? candidate : '';
+---
+<Layout title="Checkout cancelled">
+  <p class="eyebrow">PayPal cancel return</p>
+  <h1>Checkout cancelled</h1>
+  <p class="badge">CANCELLED CHECKOUT</p>
+  <p>This cancel route does not capture a payment. This is a browser checkout cancellation, not a claim that PayPal deleted or voided the order.</p>
+  {token && <p>Order token: <code>{token}</code></p>}
+  <nav class="actions" aria-label="Cancel recovery">
+    {token && <a class="button secondary" href={`/status?token=${encodeURIComponent(token)}`}>Read PayPal status only</a>}
+    <a href="/">Back to manual form</a>
+  </nav>
+</Layout>

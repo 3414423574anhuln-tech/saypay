@@ -1,0 +1,20 @@
+---
+import '../styles/w1.css';
+interface Props { title: string }
+const { title } = Astro.props;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="SayPay W1 manual PayPal sandbox order flow." />
+    <title>{title} — SayPay W1</title>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header><a href="/">SayPay <span>W1</span></a><span>PayPal sandbox · test money only</span></header>
+    <main id="main"><slot /></main>
+    <footer>Manual payment-chain verification. AI parsing and the product confirmation card are later stages.</footer>
+  </body>
+</html>

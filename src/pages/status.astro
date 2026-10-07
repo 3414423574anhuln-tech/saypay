@@ -1,0 +1,17 @@
+---
+import Layout from '../components/Layout.astro';
+import Status from '../components/Status.astro';
+import { runtime } from '../lib/runtime';
+import { applicationError } from '../lib/errors';
+import { readOrderStatus, orderToken } from '../lib/flow';
+import type { OrderStatus } from '../lib/types';
+let token = '';
+let result: OrderStatus | undefined;
+let error;
+try {
+  token = orderToken(Astro.url.searchParams.get('token'));
+  const { config, paypal } = runtime();
+  result = await readOrderStatus(token, paypal, config);
+} catch (failure) { error = applicationError(failure); Astro.response.status = error.httpStatus; }
+---
+<Layout title="Read PayPal status"><Status result={result} error={error} token={token} captureAllowed={result?.paypalStatus === 'APPROVED'} /></Layout>

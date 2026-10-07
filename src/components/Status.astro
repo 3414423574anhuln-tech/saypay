@@ -1,0 +1,36 @@
+---
+import type { OrderStatus } from '../lib/types';
+import type { AppError } from '../lib/errors';
+interface Props { result?: OrderStatus; error?: AppError; token: string; captureAllowed?: boolean }
+const { result, error, token, captureAllowed = false } = Astro.props;
+---
+{error ? (
+  <section aria-labelledby="error-heading">
+    <p class="eyebrow">This step could not be verified</p>
+    <h1 id="error-heading">Payment status unavailable</h1>
+    <div class="error" role="alert"><strong>{error.stage} · {error.code}</strong><p>{error.message}</p></div>
+    {token && <p>Order token: <code>{token}</code></p>}
+    <p>Do not create a replacement order until the outcome of this order is resolved.</p>
+  </section>
+) : result ? (
+  <section aria-labelledby="status-heading">
+    <p class="eyebrow">Verified through PayPal GET</p>
+    <h1 id="status-heading">{result.completed ? 'Payment completed' : 'Payment is not completed'}</h1>
+    <p class:list={['badge', { success: result.completed }]}>{result.paypalStatus}</p>
+    <dl>
+      <dt>Order ID</dt><dd><code>{result.orderId}</code></dd>
+      <dt>Payee</dt><dd>{result.submitted.payeeEmail}</dd>
+      <dt>Amount</dt><dd>USD {result.submitted.amount}</dd>
+      <dt>Purpose</dt><dd>{result.submitted.description}</dd>
+      {result.transactionId && <><dt>Transaction / capture ID</dt><dd><code id="transaction-id">{result.transactionId}</code></dd></>}
+      <dt>PayPal API status</dt><dd id="api-status">{result.paypalStatus}</dd>
+    </dl>
+    <p>{result.completed ? 'The final order and completed capture match the authenticated submitted fields. Sandbox test money only.' : 'A browser return does not establish success. The PayPal API has not verified a completed capture.'}</p>
+  </section>
+) : null}
+<nav class="actions" aria-label="Payment recovery">
+  {token && <a class="button secondary" href={`/status?token=${encodeURIComponent(token)}`}>Read PayPal status</a>}
+  {token && captureAllowed && !result?.completed && <a class="button secondary" href={`/return?token=${encodeURIComponent(token)}`}>Retry approved-order completion</a>}
+  <a href="/">Back to manual form</a>
+</nav>
+<p class="hint">If sandbox checkout loops, copy its order token and use the status lookup on the manual form. The status route only reads; it never captures.</p>
