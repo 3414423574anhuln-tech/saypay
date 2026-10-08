@@ -1,93 +1,84 @@
-# SayPay — payment intent drafts and sandbox service
+# SayPay — say it, review it, pay it
 
-**Say it. Review it. Pay it.**
+Astro SSR + TypeScript on Cloudflare Workers. The W3 workspace at `/parse` turns an English or Chinese payment intent into a stored AI draft, lets a human edit and confirm it, opens PayPal sandbox approval, and shows completion only after final API read-back. The W1 manual sandbox form remains at `/`.
 
-This Astro SSR + TypeScript app for Cloudflare Workers has two separate paths: **W2 intent parsing** produces an unpaid draft or a clarification question at `/parse`; the **W1 manual sandbox form** at `/` performs PayPal create/approve/capture with API-verified status pages and server-side token caching.
-
-The product confirmation card, audit persistence, amount-cap enforcement, injection demo UX and public deployment remain later stages. Parsing has **no path to PayPal order creation**: there is no confirmation/pay button, automatic form population, stored draft or payment API call in W2. The manual payment path does not import a parser or require LLM configuration. The [W1 recovery packet](W1-RECOVERY.md) and [W2 packet](W2-PACKET.md) record the stage contracts.
-
-**W1 accepted and pushed:** the real application completed its one USD 10.00 sandbox acceptance order after user-performed buyer approval. Independent read-only GET verified `COMPLETED`, matching submitted fields and transaction ID `3K382600KB1662720` (order `6CJ230299F372393H`). Joint W1 review passed; commit `1c3a994` is on remote main. The earlier standalone smoke test is not this application's receipt. `docs/W1-REPORT.md` retains the pre-commit evidence snapshot; the accepted ruling is recorded in the W2 packet.
-
-**W2 acceptance status:** mocked parsing checks and real English/Chinese/missing-field cases pass, including a real clarification answer round-trip with the user's configured DeepSeek service. The results remain unpaid drafts. See `docs/W2-REPORT.md` for separate mock/real evidence, earlier failures and the pending joint review. No public deployment is claimed.
+W1 and W2 passed joint review and were pushed (`1c3a994`, `a2a1db9`). W3 mock and real sandbox acceptance pass locally; joint stage review is pending. See [the W3 report](docs/W3-REPORT.md) for separate evidence and retained failed attempts. W3 is not pushed until joint Muse + Sol review. Injection demo presentation, payee allowlist, guardrail hardening and public deployment remain W4. The stage contracts are [W1 recovery](W1-RECOVERY.md), [W2](W2-PACKET.md), [W3](W3-PACKET.md) and the [approved W3 reconciliation](W3-RECONCILIATION.md).
 
 ## Fresh-clone setup
 
-Use Node.js 22.12+ and npm (tested with Node 24). Clone this repository into a new folder, then run:
+Use Node.js 22.12+ and npm (local checks use Node 24). Clone into a new folder and install the pinned dependencies:
 
 ```sh
 npm ci
-npm run types
 ```
 
-Copy `.env.example` to `.env`. In PowerShell:
+Copy the empty template once. In PowerShell:
 
 ```powershell
 Copy-Item -LiteralPath .env.example -Destination .env
 ```
 
-Fill **only these two required secrets** locally:
+Fill these names locally in the root `.env`:
 
 ```dotenv
 PAYPAL_CLIENT_ID=
 PAYPAL_CLIENT_SECRET=
-```
-
-Use the Client ID and Secret of your PayPal **sandbox** REST app. Values must never be committed, printed, shown in screenshots, or sent through chat. No LLM key is needed for W1.
-
-Start the app:
-
-```sh
-npm run dev
-```
-
-Open **`http://localhost:4321`**. The Worker configuration defaults `APP_URL` to this exact origin. Do not switch to `127.0.0.1` or silently use another port: the browser origin, `APP_URL`, and return/cancel URLs must match. The local server uses strict port checking and exits when its port is occupied; stop the conflicting process or explicitly change the origin before testing. Local `.env` loading is supported by [Cloudflare's tools](https://developers.cloudflare.com/workers/configuration/secrets/); do not create a competing `.dev.vars` file.
-
-## W2: parse an intent or clarify missing facts
-
-The W1 setup above still works without LLM credentials. To test W2, add these **three empty-template names** to the same root `.env` and fill their values locally:
-
-```dotenv
 LLM_API_BASE=
 LLM_API_KEY=
 LLM_MODEL=
 ```
 
-Use an OpenAI-compatible API base (including its version path when required), API key and model that support JSON-schema-constrained output. For the official DeepSeek hostname, the server appends `/responses` and sends the schema in `text.format`; other compatible bases use `/chat/completions` with `response_format`. Both requests specify JSON Schema and `strict: true`, with the same committed schema and validation. Parameters are read exclusively on the server; do not send values through chat, commit them, or show them in screenshots. No default provider or model is selected. Restart `npm run dev` after editing `.env`.
+PayPal values must belong to the same **sandbox** REST app. LLM values must select an OpenAI-compatible service/model supporting strict JSON Schema output. No model or provider is chosen by the application. No LLM values are needed for the W1 manual path. Never commit, print, screenshot or send credential values through chat. Do not create a competing `.dev.vars` file.
 
-The client uses manual redirect handling and rejects all 3xx responses before using their body or issuing another request. Responses are limited to 128,000 bytes while reading. This preserves the credential boundary and works with the local workerd runtime. A compatible API shape alone does not establish JSON-schema support: if the service rejects the schema format, resolve that compatibility before acceptance; do not downgrade to plain JSON output. [DeepSeek's Responses reference](https://api-docs.deepseek.com/api/create-response/) documents JSON-schema text output, and its [compatibility guide](https://api-docs.deepseek.com/guides/responses_api/) documents stateless requests. W2 sends original intent and ordered answers on each call, with no tools or stored conversation.
+`APP_URL` defaults to `http://localhost:4321`. `MAX_TRANSACTION_USD` defaults to `200` if omitted; the template restores that historical name. A supplied malformed, nonpositive or non-cent-exact cap blocks payment configuration. The cap is configuration, not a credential. Restart after changing `.env`.
 
-1. Open **`http://localhost:4321/parse`**. Enter an English or Chinese intent with a recipient, exact amount and currency, plus any purchase/note.
-2. Submit **Generate draft only**. The server calls the configured LLM with the committed prompt and schema, then validates the result. The page displays the Section 6 fields as **DRAFT — not paid**. These fields are read-only and cannot create an order.
-3. If required information is missing or ambiguous, the result is a clarification question with **no draft**. Answer it and submit **Re-parse intent with answer**. The request carries the original intent and ordered answers each time; W2 stores no conversation or draft. Start a new intent after eight answers.
-4. An unknown payee email stays empty. It may be filled at the later confirmation stage; the parser does not guess one. API failures and invalid outputs show a stage, safe original provider code when available, and a plain-language reason. Refusal, incomplete output, invalid schema and total mismatch do not fabricate a draft or silently fall back to JSON mode.
+```sh
+npm run types
+npm run dev
+```
 
-Monetary validation uses integer cents and recomputes `total` from quantity × unit amount. Input/output source checks reject unsupported amounts, emails, quantities and notes; common missing/vague facts produce clarification. Notes retain their original wording. These checks cover the documented English/Chinese fixtures, not every possible linguistic interpretation; inspect the draft rather than treating model confidence as verified correctness.
+Open **http://localhost:4321/parse**. Keep that exact origin: the browser, `APP_URL`, return URLs and cancel URLs must agree. Local strict-port checking exits if the port is occupied. Cloudflare documents local env loading in its [secrets guide](https://developers.cloudflare.com/workers/configuration/secrets/).
 
-The parsing layer recognizes explicit amount-override instructions, removes recognized snippets from extraction input, retains `injection_flags`, and blocks induced amount changes. This is W2 parsing correctness. There are no demo buttons, amount cap or payment integration; those stages remain closed. The strict-output request and refusal handling follow [official OpenAI documentation](https://developers.openai.com/api/docs/guides/structured-outputs); other compatible providers still require real acceptance verification.
+## W3 workspace: draft → confirmation → sandbox approval → final GET
 
-## W1: create → approve → capture → final GET
+1. Enter a recipient, exact amount and currency, purchase and note; select **Generate draft only**. Parsing cannot create an order. Missing or vague required facts produce a clarification question. Answers append to the server-stored original intent and history; the browser cannot replace them. After eight answers, start a new combined intent.
+2. Review the editable **DRAFT — not paid** card: payee name/email, items, quantities, unit amounts, currency, total, note, confidence, ambiguities and parsing flags. Confidence is an uncalibrated model estimate. An unknown merchant email stays empty until you fill it. **Validate edits only** persists validated edits without creating an order.
+3. W3 executes **USD only**. A non-USD draft keeps its original currency and is visibly blocked. A deliberate currency edit to USD is recorded alongside the original AI currency; no conversion occurs. Both the card and server pre-create validation use one integer-cent cap policy. An over-cap attempt records BLOCKED with cap/attempted amount and creates no order. The same server cap applies to the W1 manual write path.
+4. Select **Confirm and open PayPal sandbox**. The server retrieves the draft by ID and validates only the allowed visible edits. It recomputes quantity × unit amount, rejects a posted-total mismatch, validates the payee email, USD currency, cap and PayPal purpose length. Forged execution/AI metadata is rejected. A persisted confirmed snapshot and atomic revision claim precede order creation; stale or double-clicked confirmations do not create another order.
+5. The buyer logs in and approves on PayPal using a **Personal sandbox account**. Use test money only. Buyer and Business sandbox account roles are described in [PayPal's sandbox guide](https://developer.paypal.com/sandbox-testing/accounts). The app does not perform buyer approval.
+6. PayPal returns to `/workspace/return?draftId=ID&token=ORDER_ID`. The server GETs and reconciles the order against its signed fields and stored confirmed snapshot. Capture runs only for APPROVED. A further GET must verify COMPLETED and one matching completed capture before the card shows completion and transaction/capture ID.
+7. **Read PayPal status only** uses `/workspace/status`; it never captures. If sandbox checkout loops, use the existing order token in the recovery view, read status and explicitly finish an approved order. The checkout page's appearance is not authoritative. A completed callback can be refreshed without another capture.
+8. `/workspace/cancel` records browser checkout cancellation and never calls capture. It does not void or delete the PayPal order. A W3 cancelled record cannot be completed through its W3 return action. Concurrent capture/cancel actions surface a plain pending-capture error rather than claiming cancellation undid a payment.
 
-1. On the manual form, enter the **actual sandbox merchant/payee email**, amount (USD 10.00 for the W1 acceptance run), currency fixed to USD, and an English purpose. All fields are visible before order creation. PayPal describes buyer/personal and merchant/business sandbox accounts in its [sandbox account guide](https://developer.paypal.com/sandbox-testing/accounts).
-2. Deliberately submit **Create sandbox order and open PayPal**. The server validates the form, creates a CAPTURE-intent sandbox order, and redirects to PayPal's sandbox approval URL. It does not approve the order.
-3. The buyer performs sandbox login and approval using a sandbox buyer account, separately from the server credentials. Never use a real-money checkout.
-4. PayPal returns to `/return?token=ORDER_ID`. This `token` is the order recovery mechanism. The server GETs that order and verifies its authenticated submitted fields. Only `APPROVED` permits capture. It then GETs the order again; only a final `COMPLETED` order with a matching completed capture shows success and a **transaction/capture ID**.
-5. Save the displayed **order ID, transaction ID, and final API status** as real acceptance evidence. Refreshing a completed return performs GET verification without sending a new capture request.
-6. If checkout loops, copy the order token from its URL and use the form's **Read an existing order** lookup. `/status?token=ORDER_ID` reads only and never captures. If the API reports `APPROVED`, use its explicit approved-order completion link. The browser's appearance does not establish the order state.
-7. `/cancel` shows a cancelled checkout and never calls capture. It does not claim that PayPal voided or deleted the order; the optional status link remains read-only.
+A create timeout can leave an unknown outcome. The confirmed snapshot remains stored; recover the existing token with a read-only GET rather than submitting a replacement. A capture claim remains pending for two minutes; read status first, and explicitly finish again if still approved after that interval. Retries reuse W1's stable capture request ID. This is not a claim of global exactly-once delivery. A provider failure shows its stage and safe original code; audit records retain the failure stage. A storage outage leaves the last successfully persisted snapshot available when storage recovers and shows an error, never fake success.
 
-An unresolved create timeout is not safe proof that no order exists. Check the sandbox dashboard before creating a replacement. A pending or malformed capture never displays success. API failures show their stage and original error code, without raw credential-bearing responses.
+For real W3 acceptance, use three labelled intents: normal (edit at least one card field before confirmation), missing amount (answer the question, then confirm), and above-cap (no approval or order). The first two each require a human sandbox buyer approval. Inspect all three audit records after refresh and dev-server restart.
 
-## No local order persistence
+## Draft and audit storage
 
-The PayPal return token locates the order after a server restart. To verify that the payee, amount, currency, purpose, and reference still match what this app submitted, create includes an HMAC tag in PayPal's `purchase_units[].custom_id`. The server derives a domain-separated signing key from its existing sandbox app credentials; it needs no additional secret or browser cookie.
+`DraftStore` is a small interface for create/get/revision-checked replace/list. The backing store is **one SQLite-backed Durable Object per anonymous browser workspace**, using its key/value API to store JSON draft/audit records and a paginated index. There is no D1 database, user account system, shared global journal or credential in these records. [Cloudflare's storage API](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/) documents synchronous KV and atomic transactions; [Astro's Cloudflare integration](https://docs.astro.build/en/guides/integrations-guide/cloudflare/) supports the custom Worker entrypoint exporting the object class.
 
-The GET response must carry fields matching that tag before capture. The final capture amount must also match. An order created elsewhere without the binding tag is rejected. This metadata is an integrity check, not a locally stored order/audit record. It uses fields documented in [PayPal's Orders specification](https://github.com/paypal/paypal-rest-api-specifications/blob/main/openapi/checkout_orders_v2.json). Rotating the app credentials makes earlier tags unverifiable; finish the W1 run with unchanged credentials.
+Local `astro dev` keeps this state under `.wrangler/state/v3/do/`, which is ignored by Git. Page refresh and restarting from the same checkout/state directory preserve records. Deleting local state, using a fresh clone or another browser workspace does not recover that journal. The HttpOnly, SameSite=Lax workspace cookie expires after 30 days; clearing it loses this browser's lookup. It is an anonymous lookup capability, not a user login. Records are not automatically purged; 20 entries display per page, with older-entry navigation. Each serialized intent has a 128,000-byte limit. Existing JSON remains if a larger replacement is rejected. Credentials are read only from server env; configured credential strings are blocked from intent/draft/audit content.
 
-The OAuth cache holds only completed token strings in server memory, refreshed 60 seconds before expiry. It is reused across API calls in the same Worker process and resets when that process restarts. Capture requests use a stable request ID derived from the order reference. The app never requests a live PayPal base URL.
+No Cloudflare resources have been remotely provisioned or deployed. The binding/migration in `wrangler.jsonc` prepares the Workers shape; W4 will address public deployment and broader storage/access policy. Local persistence is not an exported backup.
 
-## Focused verification
+## Retained W2 parser guarantees and limits
 
-Run the checks with the dev server stopped, then restart it before app verification.
+The core parser still sends the settled closed schema with `strict: true` and validates independently. On the official DeepSeek hostname it uses `/responses` with `text.format`; other compatible hosts use `/chat/completions` with `response_format`. No plain-JSON downgrade, fallback provider or model is selected. The client rejects 3xx without forwarding credentials and bounds provider responses at 128,000 bytes. See [DeepSeek's Responses reference](https://api-docs.deepseek.com/api/create-response/) and [stateless compatibility guide](https://api-docs.deepseek.com/guides/responses_api/). The structured-output request follows [OpenAI's documentation](https://developers.openai.com/api/docs/guides/structured-outputs).
+
+Validation uses integer cents and source checks for supported amounts, recipients, quantities, notes and explicit override snippets. Structured output constrains shape, not semantic truth; these language recognizers cover the documented fixtures, not every interpretation or injection. Inspect the card. Parser output remains currency-agnostic, including a legitimately stated USD 1000 draft; W3's execution policy blocks that draft downstream. The historical read-only W2 draft component is reused only for audit snapshots.
+
+## W1 manual fallback and reconciliation
+
+At `/`, enter the actual sandbox merchant email, USD amount and purpose, then deliberately create the order. The shared cap now also runs before this manual create handler. Other manual fields and W1 API reconciliation are retained. `/return?token=ORDER_ID` verifies signed submitted fields, captures only if APPROVED, then GETs again. `/status?token=ORDER_ID` only reads; `/cancel` only shows browser cancellation. Manual validation rejections do not create W3 intent audit records.
+
+The W1 signature in PayPal `custom_id` binds payee, amount, currency, purpose and reference to a key derived from the existing app credentials. Orders lacking a valid binding cannot be captured by this flow. Rotating credentials makes earlier tags unverifiable. W3 additionally compares the API read-back to its stored confirmed snapshot. Metadata fields are documented in [PayPal's Orders specification](https://github.com/paypal/paypal-rest-api-specifications/blob/main/openapi/checkout_orders_v2.json).
+
+OAuth tokens are cached in server memory, refreshed 60 seconds before expiry, reused across calls in the same Worker process and reset on restart. The app always uses `https://api-m.sandbox.paypal.com`. W1's accepted real receipt remains order `6CJ230299F372393H`, capture `3K382600KB1662720`; it is separate from W3 evidence.
+
+## Verification and Worker shape
+
+Stop the dev server before checks, then restart for browser acceptance:
 
 ```sh
 npm test
@@ -96,16 +87,10 @@ npm run deploy:check
 npm run scan:secrets
 ```
 
-Service tests use explicit mocked responses. W1 tests cover token caching and API reconciliation. W2 tests cover normal English/Chinese drafts, missing/vague facts, stateless clarification round-trips, integer-cent recomputation, schema violations, the specified tampering fixture, provider errors, and the complete parsing import graph's payment boundary. They do not constitute real API evidence.
+Mocks are labelled separately from actual service evidence. They cover W1 reconciliation/token caching, retained W2 bilingual/schema/source validation, W3 full edited and clarified flows, forged metadata, total mismatch, direct crafted-POST cap bypass, manual-handler cap enforcement, audit read-back, cancellation, failures, stale confirmations and concurrent capture claims.
 
-The secret scanner checks current tracked/nonignored files, staged changes, and every file in every reachable commit for selected credential patterns and forbidden `.env`/`.dev.vars` paths. It also compares any configured PayPal credentials and `LLM_API_KEY` against those files and built output in memory. It reports filenames/codes, never candidate values. A clean scan is not a guarantee against every possible secret format. `.env.example` contains empty credential templates and may be committed.
+The scanner compares the three locally configured credential values in memory against current publishable files, staged content, built output and every file version in reachable Git history; it also checks selected patterns, dotenv assignments and forbidden secret-file paths. It reports codes/paths, never values. A clean scan does not establish detection of every secret format. `.env` is ignored; `.env.example` has empty credential fields. The build removes generated preview `.dev.vars` before output is written, so local credentials remain only in root `.env`.
 
-## Worker shape and stage gate
+`src/worker.ts` exports `DraftJournal` and delegates HTTP requests to Astro's Cloudflare handler. `wrangler.jsonc` configures that entrypoint, static assets and the SQLite-backed object migration. Astro sessions and incoming-request logs are disabled. `deploy:check` builds and packages locally without deploying. No new libraries were added for W3. The existing pinned `sharp` override follows the [maintainer's security advisory](https://github.com/advisories/GHSA-wq5f-xc86-pv6w).
 
-`wrangler.jsonc` selects the official Astro Cloudflare entrypoint and static assets. There are no D1, KV, or audit bindings. Astro sessions are disabled. Workers logs contain stage/error codes, not credentials; incoming request logs are disabled. `deploy:check` packages locally and does not deploy.
-
-The build configuration removes Cloudflare's generated preview `.dev.vars` asset before writing output. Local credentials remain in the root `.env`; the secret scanner also checks built output against those values. Use `npm run dev` for the credentialed W1 acceptance run. Built preview does not receive a duplicate local credential file.
-
-The lockfile overrides Miniflare's `sharp` dependency to `0.35.5`, the patched release named in the [maintainer's security advisory](https://github.com/advisories/GHSA-wq5f-xc86-pv6w). This keeps the selected Astro/Workers versions while removing the reported vulnerable image dependency.
-
-W1 passed joint review and was pushed. W2 must pass its acceptance checklist and joint Muse + Sol review before its commit is pushed or W3 begins. The MIT license remains at the repository root.
+The accepted W1/W2 report snapshots remain in `docs/`. The MIT license remains at the root. W3 requires its acceptance evidence and joint review before push; W4 remains closed.

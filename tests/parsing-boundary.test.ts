@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve, relative } from 'node:path';
 import { parsingRequest } from '../src/lib/parsing-request';
 
-describe('W2 request and no-draft-to-payment boundary', () => {
+describe('W2 stateless helper and core parser payment boundary retained in W3', () => {
   it('carries the original intent and ordered answers in the request without a stored draft ID', async () => {
     const body = new URLSearchParams({ intent: 'Pay Alice for avatar design.', answers: JSON.stringify(['USD']), answer: '25 dollars' });
     const request = new Request('http://localhost:4321/parse', { method: 'POST', headers: { origin: 'http://localhost:4321' }, body });
@@ -17,7 +17,7 @@ describe('W2 request and no-draft-to-payment boundary', () => {
     const request = new Request('http://localhost:4321/parse', { method: 'POST', headers: { origin: 'http://localhost:4321' }, body: new URLSearchParams({ intent: 'x'.repeat(48001) }) });
     await expect(parsingRequest(request, 'http://localhost:4321')).rejects.toMatchObject({ stage: 'intent input', code: 'FORM_TOO_LARGE', httpStatus: 413 });
   });
-  it('inspects the complete local import graph of the parser page for payment or persistence dependencies', () => {
+  it('inspects the complete local import graph of the core parser for payment or persistence dependencies', () => {
     const seen = new Set<string>(); const root = resolve('.');
     const visit = (file: string) => {
       if (seen.has(file)) return; seen.add(file);
@@ -32,7 +32,7 @@ describe('W2 request and no-draft-to-payment boundary', () => {
         expect(resolved, specifier).toBeDefined(); visit(resolved!);
       }
     };
-    visit(resolve('src/pages/parse.astro'));
+    visit(resolve('src/lib/llm.ts'));
     expect(seen.has(resolve('src/lib/llm.ts'))).toBe(true);
     const route = readFileSync('src/pages/parse.astro', 'utf8');
     expect([...route.matchAll(/<form[^>]+action="([^"]+)"/g)].map(match => match[1])).toEqual(['/parse', '/parse']);

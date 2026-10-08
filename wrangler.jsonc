@@ -1,13 +1,17 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "saypay",
-  "main": "@astrojs/cloudflare/entrypoints/server",
+  "main": "./src/worker.ts",
   "compatibility_date": "2026-10-07",
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "binding": "ASSETS", "directory": "./dist" },
   "vars": {
     "APP_URL": "http://localhost:4321"
   },
+  "durable_objects": {
+    "bindings": [{ "name": "DRAFT_JOURNAL", "class_name": "DraftJournal" }]
+  },
+  "migrations": [{ "tag": "w3-journal-v1", "new_sqlite_classes": ["DraftJournal"] }],
   "observability": {
     "enabled": true,
     "logs": { "enabled": true, "invocation_logs": false },

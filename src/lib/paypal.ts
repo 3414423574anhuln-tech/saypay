@@ -7,7 +7,7 @@ const tokens = new Map<string, { value: string; expires: number; secret: string 
 
 export class PayPal implements PayPalService {
   // Workerd rejects native fetch called as an instance method with a foreign receiver.
-  constructor(private config: PayPalConfiguration, private request: typeof fetch = (input, init) => fetch(input, init), private now: () => number = Date.now) {}
+  constructor(private config: PayPalConfiguration, private request: typeof fetch = (input, init) => fetch(input, init), private now: () => number = Date.now, private checkout: { returnPath: string; cancelPath: string; draftReference?: boolean } = { returnPath: '/return', cancelPath: '/cancel' }) {}
   private async token(): Promise<string> {
     requireCredentials(this.config);
     const { clientId: id, clientSecret: secret } = this.config;
@@ -49,12 +49,13 @@ export class PayPal implements PayPalService {
     return body as unknown as PayPalOrder;
   }
   createOrder(order: ManualOrder, signature: string, requestId: string) {
+    const callback = (path: string) => { const url = new URL(path, this.config.appUrl); if (this.checkout.draftReference) url.searchParams.set('draftId', order.reference); return url.href; };
     return this.call('/v2/checkout/orders', 'PayPal create', 'POST', {
       intent: 'CAPTURE', purchase_units: [{ reference_id: order.reference, custom_id: signature,
         payee: { email_address: order.payeeEmail }, description: order.description,
         amount: { currency_code: order.currency, value: order.amount },
       }],
-      payment_source: { paypal: { experience_context: { brand_name: 'SayPay W1', shipping_preference: 'NO_SHIPPING', user_action: 'PAY_NOW', return_url: new URL('/return', this.config.appUrl).href, cancel_url: new URL('/cancel', this.config.appUrl).href } } },
+      payment_source: { paypal: { experience_context: { brand_name: this.checkout.draftReference ? 'SayPay' : 'SayPay W1', shipping_preference: 'NO_SHIPPING', user_action: 'PAY_NOW', return_url: callback(this.checkout.returnPath), cancel_url: callback(this.checkout.cancelPath) } } },
     }, requestId);
   }
   getOrder(orderId: string) { return this.call(`/v2/checkout/orders/${encodeURIComponent(orderId)}`, 'PayPal status'); }

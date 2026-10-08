@@ -2,7 +2,7 @@ import { AppError } from './errors';
 import { validatedInput } from './parsing-input';
 import type { ParsingInput } from './draft-types';
 
-async function formText(request: Request): Promise<string> {
+export async function formText(request: Request): Promise<string> {
   if (!request.body) throw new AppError('intent input', 'INVALID_FORM', 'Submit the intent through the parsing form.');
   const reader = request.body.getReader();
   const decoder = new TextDecoder();

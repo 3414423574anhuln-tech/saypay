@@ -1,48 +1,88 @@
 ---
 import Layout from '../components/Layout.astro';
-import DraftResult from '../components/DraftResult.astro';
+import ConfirmationCard from '../components/ConfirmationCard.astro';
+import AuditTrail from '../components/AuditTrail.astro';
 import '../styles/w2.css';
-import { AppError } from '../lib/errors';
-import { parsingRuntime } from '../lib/llm-runtime';
-import { parsingRequest } from '../lib/parsing-request';
-import type { ParseResult, ParsingInput } from '../lib/draft-types';
-const runtime = parsingRuntime();
-const configured = !!runtime.config.base && !!runtime.config.key && !!runtime.config.model;
-let input: ParsingInput = { intent: '', answers: [] };
-let result: ParseResult | undefined;
+import '../styles/w3.css';
+import { AppError, applicationError } from '../lib/errors';
+import { workspaceRuntime } from '../lib/workspace-runtime';
+import { workspaceForm } from '../lib/workspace-request';
+import { draftId } from '../lib/journal';
+import type { IntentEntry, JournalPage } from '../lib/journal-types';
+let runtime: ReturnType<typeof workspaceRuntime> | undefined;
+let entry: IntentEntry | undefined;
+let page: JournalPage = { entries: [], next: null };
 let error: AppError | undefined;
-if (Astro.request.method === 'POST') {
-  try { input = await parsingRequest(Astro.request, runtime.appOrigin); result = await runtime.parse(input); }
-  catch (failure) { error = failure instanceof AppError ? failure : new AppError('AI parsing', 'INTERNAL_ERROR', 'The server could not parse this intent. No draft or payment was created.', 500); Astro.response.status = error.httpStatus; }
+let intent = '';
+let selectedId = Astro.url.searchParams.get('draftId') ?? '';
+try {
+  runtime = workspaceRuntime(Astro.cookies, Astro.url);
+  if (Astro.request.method === 'POST') {
+    const form = await workspaceForm(Astro.request, runtime.appOrigin);
+    const one = (key: string) => { if (form.getAll(key).length !== 1) throw new AppError('intent input', 'INVALID_FORM', 'Submit each workspace input exactly once.', 422); return form.get(key)!; };
+    if (form.has('draftId')) {
+      if ([...form.keys()].some(key => !['draftId', 'revision', 'answer'].includes(key))) throw new AppError('clarification', 'INVALID_FORM', 'Answer the stored clarification; original intent and history come from the server.', 422);
+      selectedId = draftId(one('draftId'));
+      const revision = one('revision');
+      if (!/^\d{1,9}$/.test(revision)) throw new AppError('clarification', 'INVALID_REVISION', 'Reload the stored question.', 409);
+      entry = await runtime.flow.answer(selectedId, Number(revision), one('answer'));
+    } else {
+      if ([...form.keys()].some(key => key !== 'intent')) throw new AppError('intent input', 'INVALID_FORM', 'Submit only a new intent.', 422);
+      intent = one('intent'); entry = await runtime.flow.start(intent); selectedId = entry.id;
+    }
+    return Astro.redirect(`/parse?draftId=${selectedId}`, 303);
+  }
+  if (selectedId) entry = await runtime.flow.get(draftId(selectedId));
+} catch (failure) {
+  error = applicationError(failure); Astro.response.status = error.httpStatus;
+  if (error.code === 'SENSITIVE_INPUT_BLOCKED') intent = '';
+  const failedId = (failure as { draftId?: string })?.draftId;
+  if (failedId) selectedId = failedId;
+  if (runtime && selectedId) { try { entry = await runtime.flow.get(draftId(selectedId)); } catch { /* The original failure remains visible. */ } }
+  if (Astro.request.method === 'POST' && entry) return Astro.redirect(`/parse?${new URLSearchParams({ draftId: entry.id, stage: error.stage, code: error.code, message: error.message })}`, 303);
 }
+if (runtime) {
+  try { page = await runtime.store.list(Astro.url.searchParams.get('before') ?? undefined); }
+  catch (failure) { error = applicationError(failure); Astro.response.status = error.httpStatus; }
+}
+// Redirect diagnostics are messages only; payment state comes from the persisted record/API.
+const queryError = Astro.url.searchParams.get('code') && !error ? {
+  stage: (Astro.url.searchParams.get('stage') ?? 'workspace').slice(0, 100),
+  code: (Astro.url.searchParams.get('code') ?? '').slice(0, 100),
+  message: (Astro.url.searchParams.get('message') ?? '').slice(0, 1000),
+} : undefined;
+const configured = runtime?.configured;
+if (!error && !entry?.aiDraft && entry?.error) error = new AppError(entry.error.stage, entry.error.code, entry.error.message, 422);
+const visibleError = error || queryError;
 ---
-<Layout title="Parse a payment intent">
-  <p class="eyebrow">W2 · intent parsing</p>
-  <h1>Describe a payment intent</h1>
-  <p>English or Chinese input produces a draft or a clarification question. Nothing on this page can initiate a payment.</p>
-  {!configured && <p class="notice">AI configuration · LLM_NOT_CONFIGURED: Fill LLM_API_BASE, LLM_API_KEY and LLM_MODEL locally in this checkout’s .env. Do not send values through chat.</p>}
-  {error && <div role="alert" class="error"><strong>{error.stage} · {error.code}</strong><p>{error.message}</p></div>}
-  {result?.kind === 'clarification' ? (
-    <section aria-labelledby="clarification-heading">
-      <p class="eyebrow">Clarification — no draft or payment created</p><h2 id="clarification-heading">More information is needed</h2>
-      <p id="clarification-question">{result.question}</p>
-      <p class="hint">Missing or ambiguous: {result.missing_fields.join(', ')}</p>
-      <p><strong>Original intent:</strong> {input.intent}</p>
-      {input.answers.length > 0 && <ol>{input.answers.map(answer => <li>{answer}</li>)}</ol>}
-      <form method="post" action="/parse">
-        <input type="hidden" name="intent" value={input.intent} /><input type="hidden" name="answers" value={JSON.stringify(input.answers)} />
-        <label for="answer">Clarification answer</label><textarea id="answer" name="answer" required maxlength="1000" rows="3" aria-describedby="clarification-question"></textarea>
-        <button type="submit" disabled={!configured || input.answers.length >= 8}>Re-parse intent with answer</button>
-      </form>
-      {input.answers.length >= 8 && <p class="notice">This request reached eight clarification answers. Start a new intent with the facts combined.</p>}
-      {result.injection_flags.length > 0 && <ul>{result.injection_flags.map(flag => <li>{flag.type}: <q>{flag.snippet}</q></li>)}</ul>}
-    </section>
-  ) : <section aria-labelledby="intent-heading"><h2 id="intent-heading">Payment intent</h2><form method="post" action="/parse">
-    <label for="intent">Intent in English or Chinese</label><textarea id="intent" name="intent" required maxlength="4000" rows="4">{input.intent}</textarea>
-    <p class="hint">Include who receives the payment, the exact amount and currency, and any purchase or note.</p>
-    <button type="submit" disabled={!configured}>Generate draft only</button>
-  </form></section>}
-  {result?.kind === 'draft' && <DraftResult draft={result.draft} />}
-  <p class="hint">Intent and answers travel in this form request. W2 does not save drafts or conversation history.</p>
-  <nav class="actions" aria-label="Parsing navigation"><a href="/parse">Start a new intent</a><a href="/">Manual sandbox form</a></nav>
+<Layout title="Review a payment intent">
+  <div class="workspace">
+    <p class="eyebrow">W3 · review and sandbox execution</p><h1>Say it. Review it. Pay it.</h1>
+    <p>Your intent becomes a stored draft. Edit and confirm it, then approve as the sandbox buyer on PayPal.</p>
+    {!configured && <p class="notice">AI configuration · LLM_NOT_CONFIGURED: Fill LLM_API_BASE, LLM_API_KEY and LLM_MODEL locally in this checkout’s .env. Do not send values through chat.</p>}
+    {visibleError && (!entry?.aiDraft || visibleError.code !== entry.error?.code) && <div role="alert" class="error"><strong>{visibleError.stage} · {visibleError.code}</strong><p>{visibleError.message}</p></div>}
+    <div class="workspace-grid"><div class="workspace-input">
+      {entry?.state === 'CLARIFICATION' && entry.result?.kind === 'clarification' ? <section aria-labelledby="clarification-heading">
+        <p class="eyebrow">Clarification — no payment created</p><h2 id="clarification-heading">More information is needed</h2>
+        <p id="clarification-question">{entry.result.question}</p><p class="hint">Missing or ambiguous: {entry.result.missing_fields.join(', ')}</p>
+        <p><strong>Original intent:</strong> {entry.rawIntent}</p>
+        {entry.answers.length > 0 && <ol>{entry.answers.map(answer => <li>{answer}</li>)}</ol>}
+        <form method="post" action="/parse"><input type="hidden" name="draftId" value={entry.id} /><input type="hidden" name="revision" value={entry.revision} />
+          <label for="answer">Clarification answer</label><textarea id="answer" name="answer" required maxlength="1000" rows="3" aria-describedby="clarification-question"></textarea>
+          <button type="submit" disabled={!configured || entry.answers.length >= 8}>Re-parse intent with answer</button>
+        </form>
+        {entry.answers.length >= 8 && <p class="notice">Eight answers reached. Start a new intent with the facts combined.</p>}
+        {entry.result.injection_flags.length > 0 && <div role="alert" class="error"><ul>{entry.result.injection_flags.map(flag => <li>{flag.type}: <q>{flag.snippet}</q></li>)}</ul></div>}
+      </section> : <section aria-labelledby="intent-heading"><h2 id="intent-heading">Payment intent</h2><form method="post" action="/parse">
+        <label for="intent">Intent in English or Chinese</label><textarea id="intent" name="intent" required maxlength="4000" rows="5">{intent}</textarea>
+        <p class="hint">Include the recipient, exact amount and currency, purchase and note. An unknown merchant email can be filled on the card.</p>
+        <button type="submit" disabled={!configured}>Generate draft only</button>
+      </form></section>}
+      <p class="hint">Drafts and audit records stay in this browser workspace. Clearing its cookie loses the lookup; a completed payment remains on PayPal.</p>
+      <nav class="actions" aria-label="Workspace navigation"><a href="/parse">Start a new intent</a><a href="/">Manual sandbox form</a></nav>
+    </div><div class="workspace-result">
+      {entry?.aiDraft && runtime ? <ConfirmationCard entry={entry} cap={runtime.cap} /> : <section><p class="eyebrow">DRAFT — not paid</p><h2>Confirmation card</h2><p>A complete validated draft opens here. Parsing and clarification do not create a PayPal order.</p></section>}
+    </div></div>
+    <AuditTrail page={page} />
+  </div>
 </Layout>

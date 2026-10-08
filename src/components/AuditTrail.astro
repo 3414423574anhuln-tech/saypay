@@ -1,0 +1,25 @@
+---
+import type { JournalPage } from '../lib/journal-types';
+import DraftResult from './DraftResult.astro';
+interface Props { page: JournalPage }
+const { page } = Astro.props;
+---
+<section aria-labelledby="audit-heading" class="audit-trail"><p class="eyebrow">Persisted workspace record</p><h2 id="audit-heading">Audit trail</h2>
+  {!page.entries.length && <p>No intents have been submitted in this browser workspace.</p>}
+  {page.entries.map(entry => <article class="audit-entry"><h3><a href={`/parse?draftId=${entry.id}`}>{entry.rawIntent}</a></h3>
+    <p><strong>{entry.state}</strong> · <time datetime={entry.createdAt}>{entry.createdAt}</time></p><p>Intent ID: <code>{entry.id}</code></p>
+    <details><summary>Input, versions and transitions</summary>
+      <p><strong>Raw input:</strong> {entry.rawIntent}</p>
+      {entry.answers.length > 0 && <div><h4>Clarification answers</h4><ol>{entry.answers.map(answer => <li>{answer}</li>)}</ol></div>}
+      {entry.aiDraft && <div><h4>AI draft — original currency: {entry.aiDraft.currency}</h4><DraftResult draft={entry.aiDraft} idPrefix={`${entry.id}-ai`} snapshot="AI draft snapshot" /></div>}
+      {entry.edited && <div><h4>Validated user edits — currency: {entry.edited.currency}</h4><DraftResult draft={entry.edited} idPrefix={`${entry.id}-edited`} snapshot="Validated edit snapshot" /></div>}
+      {entry.confirmed && <div><h4>User-confirmed version — currency: {entry.confirmed.currency}</h4><DraftResult draft={entry.confirmed} idPrefix={`${entry.id}-confirmed`} snapshot="Human-confirmed snapshot" /></div>}
+      {!entry.confirmed && <p>No user-confirmed version — no confirmation has passed validation.</p>}
+      <p>Order ID: {entry.orderId || 'None — no order recorded'}</p><p>Transaction / capture ID: {entry.captureId || 'None'}</p>
+      <ol class="transitions">{entry.transitions.map(event => <li><strong>{event.state}</strong> · <time datetime={event.at}>{event.at}</time>{event.reason && <p>{event.reason}</p>}</li>)}</ol>
+      {entry.error && <p class="error">{entry.error.stage} · {entry.error.code}: {entry.error.message}</p>}
+      {entry.state === 'CANCELLED' && <p>Browser checkout cancellation does not mean the PayPal order was voided.</p>}
+    </details>
+  </article>)}
+  {page.next && <a href={`/parse?before=${encodeURIComponent(page.next)}`}>Older audit entries</a>}
+</section>

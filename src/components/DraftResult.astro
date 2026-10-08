@@ -1,19 +1,19 @@
 ---
 import type { Draft } from '../lib/draft-types';
-interface Props { draft: Draft }
-const { draft } = Astro.props;
+interface Props { draft: Draft; idPrefix?: string; snapshot?: string }
+const { draft, idPrefix = 'draft', snapshot } = Astro.props;
 ---
-<section aria-labelledby="draft-heading" class="draft-result">
-  <p class="eyebrow">DRAFT — not paid</p>
-  <h2 id="draft-heading">Extracted draft</h2>
-  <p>This read-only draft cannot create or pay a PayPal order from this screen.</p>
+<section aria-labelledby={`${idPrefix}-heading`} class="draft-result">
+  <p class="eyebrow">{snapshot || 'DRAFT — not paid'}</p>
+  <h2 id={`${idPrefix}-heading`}>{snapshot || 'Extracted draft'}</h2>
+  <p>{snapshot ? 'Stored version for comparison. Payment status is shown on the intent record.' : 'This read-only draft cannot create or pay a PayPal order from this screen.'}</p>
   <dl>
     <dt>Payee name</dt><dd>{draft.payee.name || 'Not supplied'}</dd>
-    <dt>Payee email</dt><dd>{draft.payee.email || 'Not supplied — fill it at the later confirmation stage'}</dd>
+    <dt>Payee email</dt><dd>{draft.payee.email || (snapshot ? 'Not supplied in this version' : 'Not supplied — fill it on the confirmation card')}</dd>
     <dt>Currency</dt><dd>{draft.currency}</dd>
-    <dt>Recomputed total</dt><dd id="draft-total">{draft.currency} {draft.total.toFixed(2)}</dd>
+    <dt>Recomputed total</dt><dd id={`${idPrefix}-total`}>{draft.currency} {draft.total.toFixed(2)}</dd>
     <dt>Note</dt><dd>{draft.note || 'None supplied'}</dd>
-    <dt>AI confidence</dt><dd>{draft.confidence} <span class="hint">(model estimate, not a guarantee)</span></dd>
+    <dt>AI confidence</dt><dd>{draft.confidence} <span class="hint">(uncalibrated model estimate, not a guarantee)</span></dd>
   </dl>
   <div class="table-wrap"><table><caption>Line items</caption><thead><tr><th scope="col">Item</th><th scope="col">Quantity</th><th scope="col">Unit amount</th></tr></thead><tbody>
     {draft.items.map(item => <tr><td>{item.name}</td><td>{item.quantity}</td><td>{draft.currency} {item.unit_amount.toFixed(2)}</td></tr>)}

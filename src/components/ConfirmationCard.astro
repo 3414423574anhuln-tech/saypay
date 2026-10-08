@@ -1,0 +1,44 @@
+---
+import type { IntentEntry } from '../lib/journal-types';
+import type { PaymentCap } from '../lib/payment-policy';
+import { paymentIssue } from '../lib/payment-policy';
+import { applicationError } from '../lib/errors';
+interface Props { entry: IntentEntry; cap: () => PaymentCap }
+const { entry, cap } = Astro.props;
+const draft = entry.edited || entry.aiDraft;
+const editable = !!draft && !entry.submission && ['DRAFT', 'BLOCKED', 'FAILED'].includes(entry.state);
+let issue;
+try { if (draft) issue = paymentIssue(draft.currency, draft.total, cap()); } catch (error) { issue = applicationError(error); }
+---
+{draft && <section aria-labelledby="confirmation-heading" class="confirmation-card">
+  <p class="eyebrow">{entry.state === 'COMPLETED' ? 'Payment verified through final PayPal GET' : 'DRAFT — not paid'}</p>
+  <h2 id="confirmation-heading">Review the payment</h2>
+  <p class="badge" class:list={{ success: entry.state === 'COMPLETED' }}>{entry.state}</p>
+  <p class="hint">AI confidence: {draft.confidence} — uncalibrated model estimate, not a guarantee.</p>
+  {draft.ambiguities.length > 0 && <div class="notice"><h3>AI uncertainty at parsing</h3><ul>{draft.ambiguities.map(value => <li>{value}</li>)}</ul></div>}
+  {draft.injection_flags.length > 0 && <div role="alert" class="error"><h3>Amount-tampering detections</h3><ul>{draft.injection_flags.map(flag => <li><strong>{flag.type}</strong>: <q>{flag.snippet}</q></li>)}</ul></div>}
+  {issue && <div role="alert" class="error"><strong>{issue.stage} · {issue.code}</strong><p>{issue.message}</p></div>}
+  {entry.error && entry.error.code !== issue?.code && <div role="alert" class="error"><strong>{entry.error.stage} · {entry.error.code}</strong><p>{entry.error.message}</p></div>}
+  {editable ? <form method="post" action="/workspace/confirm">
+    <input type="hidden" name="draftId" value={entry.id} /><input type="hidden" name="revision" value={entry.revision} />
+    <label for="payee-name">Payee name</label><input id="payee-name" name="payeeName" value={draft.payee.name} maxlength="120" />
+    <label for="payee-email">Sandbox merchant email</label><input id="payee-email" name="payeeEmail" type="email" value={draft.payee.email} maxlength="254" />
+    <p class="hint">An unknown email stays empty until you fill it here. Confirmation requires the actual sandbox merchant email.</p>
+    <div class="card-items">{draft.items.map((item, i) => <fieldset><legend>Item {i + 1}</legend>
+      <label for={`item-name-${i}`}>Item name</label><input id={`item-name-${i}`} name="itemName" value={item.name} required maxlength="127" />
+      <div class="row"><div><label for={`item-quantity-${i}`}>Quantity</label><input id={`item-quantity-${i}`} name="itemQuantity" type="number" min="1" step="1" value={item.quantity} required /></div><div><label for={`item-amount-${i}`}>Unit amount</label><input id={`item-amount-${i}`} name="itemAmount" type="number" min="0" step="0.01" value={item.unit_amount.toFixed(2)} required /></div></div>
+    </fieldset>)}</div>
+    <div class="row"><div><label for="currency">Currency</label><input id="currency" name="currency" value={draft.currency} required minlength="3" maxlength="3" /></div><div><label for="total">Total</label><input id="total" name="total" type="number" min="0.01" step="0.01" value={draft.total.toFixed(2)} required /></div></div>
+    <p class="hint">Changing currency is an explicit edit, not a conversion. W3 executes USD only. Update total when editing items; a mismatch blocks confirmation.</p>
+    <label for="note">Note / PayPal purpose</label><textarea id="note" name="note" maxlength="1000" rows="3">{draft.note}</textarea>
+    <div class="actions"><button type="submit" formaction="/workspace/edit" class="secondary">Validate edits only</button><button type="submit" disabled={!!issue}>Confirm and open PayPal sandbox</button></div>
+    <p class="hint">Validate edits to refresh a blocked card after changing currency or amount. Only explicit confirmation creates an order; buyer approval happens next on PayPal.</p>
+  </form> : <div><dl><dt>Payee</dt><dd>{draft.payee.email || draft.payee.name}</dd><dt>Amount</dt><dd>{draft.currency} {draft.total.toFixed(2)}</dd><dt>Note</dt><dd>{draft.note || 'None'}</dd></dl>
+    {entry.orderId && <p>Order ID: <code>{entry.orderId}</code></p>}
+    {entry.captureId && <p>Transaction / capture ID: <code>{entry.captureId}</code></p>}
+    {entry.paypalStatus && <p>PayPal API status: <strong>{entry.paypalStatus}</strong></p>}
+    {entry.orderId && <a class="button secondary" href={`/workspace/status?draftId=${entry.id}`}>Read PayPal status only</a>}
+    {entry.paypalStatus === 'APPROVED' && entry.state !== 'CANCELLED' && <a class="button" href={`/workspace/return?draftId=${entry.id}&token=${entry.orderId}`}>Finish approved sandbox order</a>}
+    {entry.submission && !entry.orderId && <form method="get" action="/workspace/status"><input type="hidden" name="draftId" value={entry.id} /><label for="recovery-token">Existing PayPal order token</label><input id="recovery-token" name="token" required maxlength="64" /><button type="submit">Recover by read-only GET</button><p class="hint">A create failure can leave an unknown outcome. Check PayPal and recover its token; this app does not create a replacement.</p></form>}
+  </div>}
+</section>}
