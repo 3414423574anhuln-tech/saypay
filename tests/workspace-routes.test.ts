@@ -27,10 +27,10 @@ function form(id: string, revision: number) {
 }
 beforeEach(() => vi.clearAllMocks());
 describe('W3 actual HTTP handlers with mocked runtime dependencies', () => {
-  async function setup() {
+  async function setup(payees: readonly string[] = []) {
     const memory = memoryJournal();
     const paypal = { createOrder: vi.fn(), getOrder: vi.fn(), captureOrder: vi.fn() };
-    const flow = new IntentFlow({ store: memory.store, parse: async () => ({ kind: 'draft', draft }), paypal, paypalConfig: config, cap: () => paymentCap({}) });
+    const flow = new IntentFlow({ store: memory.store, parse: async () => ({ kind: 'draft', draft }), paypal, paypalConfig: config, cap: () => paymentCap({}), payees: () => payees });
     runtimeMock.workspace.mockReturnValue({ flow, store: memory.store, cap: () => paymentCap({}), appOrigin: config.appUrl, configured: true });
     const entry = await flow.start('Pay Alice 10 dollars for design.');
     return { ...memory, paypal, flow, entry };
@@ -86,5 +86,17 @@ describe('W3 actual HTTP handlers with mocked runtime dependencies', () => {
     const card = readFileSync('src/components/ConfirmationCard.astro', 'utf8');
     expect(card).toContain('disabled={!!issue}'); expect(card).toContain('DRAFT — not paid'); expect(card).toContain('uncalibrated');
     expect(readFileSync('src/pages/parse.astro', 'utf8')).not.toMatch(/name="answers"|name="intent" value=\{entry/);
+  });
+  it('blocks a crafted non-allowlisted email at the confirm handler and records the reason', async () => {
+    const f = await setup(['allowed@example.test']);
+    const response = await confirmPost(context('/workspace/confirm', form(f.entry.id, f.entry.revision)));
+    expect(response.headers.get('location')).toContain('PAYEE_NOT_ALLOWLISTED'); expect(f.paypal.createOrder).not.toHaveBeenCalled();
+    expect(await f.flow.get(f.entry.id)).toMatchObject({ state: 'BLOCKED', orderId: null, error: { code: 'PAYEE_NOT_ALLOWLISTED' } });
+  });
+  it('also blocks a non-allowlisted payee at the manual create handler with zero create calls', async () => {
+    const paypal = { createOrder: vi.fn() }; runtimeMock.manual.mockReturnValue({ config, paypal, cap: () => paymentCap({}), payees: () => ['allowed@example.test'] });
+    const payload = new URLSearchParams({ payeeEmail: 'other@example.test', amount: '10.00', currency: 'USD', description: 'Manual allowlist rejection' });
+    const response = await manualPost(context('/orders/create', payload));
+    expect(response.headers.get('location')).toContain('PAYEE_NOT_ALLOWLISTED'); expect(paypal.createOrder).not.toHaveBeenCalled();
   });
 });

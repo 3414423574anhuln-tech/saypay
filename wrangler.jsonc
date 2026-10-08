@@ -6,8 +6,12 @@
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "binding": "ASSETS", "directory": "./dist" },
   "vars": {
-    "APP_URL": "http://localhost:4321"
+    "APP_URL": "http://localhost:4321",
+    "PAYPAL_ENV": "sandbox",
+    "MAX_TRANSACTION_USD": "200",
+    "SANDBOX_PAYEE_ALLOWLIST": ""
   },
+  "workers_dev": true,
   "durable_objects": {
     "bindings": [{ "name": "DRAFT_JOURNAL", "class_name": "DraftJournal" }]
   },

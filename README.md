@@ -1,8 +1,8 @@
 # SayPay — say it, review it, pay it
 
-Astro SSR + TypeScript on Cloudflare Workers. The W3 workspace at `/parse` turns an English or Chinese payment intent into a stored AI draft, lets a human edit and confirm it, opens PayPal sandbox approval, and shows completion only after final API read-back. The W1 manual sandbox form remains at `/`.
+Astro SSR + TypeScript on Cloudflare Workers. The workspace at `/parse` turns an English or Chinese payment intent into a stored AI draft, lets a human edit and confirm it, opens PayPal sandbox approval, and shows completion only after final API read-back. The manual sandbox form remains at `/`.
 
-W1 and W2 passed joint review and were pushed (`1c3a994`, `a2a1db9`). W3 mock and real sandbox acceptance pass locally; joint stage review is pending. See [the W3 report](docs/W3-REPORT.md) for separate evidence and retained failed attempts. W3 is not pushed until joint Muse + Sol review. Injection demo presentation, payee allowlist, guardrail hardening and public deployment remain W4. The stage contracts are [W1 recovery](W1-RECOVERY.md), [W2](W2-PACKET.md), [W3](W3-PACKET.md) and the [approved W3 reconciliation](W3-RECONCILIATION.md).
+W1–W3 passed joint review and were pushed (`1c3a994`, `a2a1db9`, `f78cc50`). See [the historical W3 report](docs/W3-REPORT.md) for separate evidence and retained failed attempts. W4 adds sample presentation, a configured payee allowlist and public sandbox deployment; mock and real public acceptance are complete, with joint review pending before push. The stage contracts are [W1 recovery](W1-RECOVERY.md), [W2](W2-PACKET.md), [W3](W3-PACKET.md), [W3 reconciliation](W3-RECONCILIATION.md) and [W4](W4-PACKET.md). Submission copy, video and final README preparation remain W5.
 
 ## Fresh-clone setup
 
@@ -32,6 +32,8 @@ PayPal values must belong to the same **sandbox** REST app. LLM values must sele
 
 `APP_URL` defaults to `http://localhost:4321`. `MAX_TRANSACTION_USD` defaults to `200` if omitted; the template restores that historical name. A supplied malformed, nonpositive or non-cent-exact cap blocks payment configuration. The cap is configuration, not a credential. Restart after changing `.env`.
 
+`SANDBOX_PAYEE_ALLOWLIST` is optional: comma-separated sandbox merchant emails, empty/omitted for unrestricted local development. Configured entries are validated and normalized case-insensitively; malformed configuration blocks payment creation. With a configured list, a different merchant is rejected before create on both draft and manual paths. Draft confirmation records BLOCKED with `PAYEE_NOT_ALLOWLISTED`; manual validation uses its existing error view.
+
 ```sh
 npm run types
 npm run dev
@@ -60,7 +62,7 @@ For real W3 acceptance, use three labelled intents: normal (edit at least one ca
 
 Local `astro dev` keeps this state under `.wrangler/state/v3/do/`, which is ignored by Git. Page refresh and restarting from the same checkout/state directory preserve records. Deleting local state, using a fresh clone or another browser workspace does not recover that journal. The HttpOnly, SameSite=Lax workspace cookie expires after 30 days; clearing it loses this browser's lookup. It is an anonymous lookup capability, not a user login. Records are not automatically purged; 20 entries display per page, with older-entry navigation. Each serialized intent has a 128,000-byte limit. Existing JSON remains if a larger replacement is rejected. Credentials are read only from server env; configured credential strings are blocked from intent/draft/audit content.
 
-No Cloudflare resources have been remotely provisioned or deployed. The binding/migration in `wrangler.jsonc` prepares the Workers shape; W4 will address public deployment and broader storage/access policy. Local persistence is not an exported backup.
+The W4 public Worker provisions the same journal class remotely through the existing binding/migration in `wrangler.jsonc`. Its acceptance records remain available after page refresh in the same browser workspace. Local and remote journals are separate; local persistence is not an exported backup.
 
 ## Retained W2 parser guarantees and limits
 
@@ -89,8 +91,18 @@ npm run scan:secrets
 
 Mocks are labelled separately from actual service evidence. They cover W1 reconciliation/token caching, retained W2 bilingual/schema/source validation, W3 full edited and clarified flows, forged metadata, total mismatch, direct crafted-POST cap bypass, manual-handler cap enforcement, audit read-back, cancellation, failures, stale confirmations and concurrent capture claims.
 
-The scanner compares the three locally configured credential values in memory against current publishable files, staged content, built output and every file version in reachable Git history; it also checks selected patterns, dotenv assignments and forbidden secret-file paths. It reports codes/paths, never values. A clean scan does not establish detection of every secret format. `.env` is ignored; `.env.example` has empty credential fields. The build removes generated preview `.dev.vars` before output is written, so local credentials remain only in root `.env`.
+The scanner compares locally available `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `LLM_API_KEY` and `CLOUDFLARE_API_TOKEN` values in memory against current publishable files, staged content, built output and every file version in reachable Git history; it also checks selected patterns, dotenv assignments and forbidden secret-file paths. It reports codes/paths, never values. W4 acceptance additionally scans local journal state, Wrangler logs, ignored evidence and deployment configuration. Screenshots are visually inspected and exclude configured account addresses. A clean scan does not establish detection of every secret format. `.env` is ignored; `.env.example` has empty credential fields. The build removes generated preview `.dev.vars` before output is written, so local credentials remain only in root `.env`.
 
 `src/worker.ts` exports `DraftJournal` and delegates HTTP requests to Astro's Cloudflare handler. `wrangler.jsonc` configures that entrypoint, static assets and the SQLite-backed object migration. Astro sessions and incoming-request logs are disabled. `deploy:check` builds and packages locally without deploying. No new libraries were added for W3. The existing pinned `sharp` override follows the [maintainer's security advisory](https://github.com/advisories/GHSA-wq5f-xc86-pv6w).
 
-The accepted W1/W2 report snapshots remain in `docs/`. The MIT license remains at the root. W3 requires its acceptance evidence and joint review before push; W4 remains closed.
+The accepted W1–W3 report snapshots remain in `docs/`. The MIT license remains at the root. W4 requires its mock/real acceptance and joint review before its commit is pushed. W5 remains closed.
+
+## W4 samples and deployment preparation
+
+The workspace offers three sample buttons: complete USD 10, missing amount, and the exact malicious amount-replacement instruction. Selection only fills the input; it does not parse, confirm or create. The malicious sample uses the existing parser recognizer, retains USD 10, and displays the exact offending snippet with a plain-language warning. The detector is fixture-scoped, not proof against all injections. Existing amount/currency policy remains the independent backstop; W2 induced-output and W3 over-cap evidence are retained.
+
+Configured sandbox shortcuts fill a payee email and submit **Validate edits only**, keeping the original AI draft and the explicit edit in the audit. They do not map Bob to an email or authorize a payment. Sample filling and shortcuts use small browser scripts; all server forms remain usable without JavaScript. An email-only intent can keep the display name empty; a conflict about recipient identity still requires clarification. Invalid provider JSON remains a staged FAILED record with no fallback or invented draft.
+
+Public demo: **[SayPay sandbox workspace](https://saypay.3414423574anhuln.workers.dev/parse)**. The Worker and remote journal are provisioned, and the owner has entered the five encrypted server bindings. Normal and amount-tampering runs each completed a human-approved USD 10.00 payment, independently verified with PayPal GET. The demo runs entirely on PayPal sandbox fake money. This is not live payment processing.
+
+Deployment secrets are entered interactively by the account owner, never copied to Cloudflare by the assistant. See [deployment steps](docs/W4-DEPLOYMENT.md). All deploys must supply the public `APP_URL`, sandbox environment, USD 200 cap and the existing sandbox merchant allowlist; the source config intentionally keeps local defaults. No LLM base/model/key or PayPal credential value belongs in the repo.

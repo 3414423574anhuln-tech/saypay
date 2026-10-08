@@ -1,0 +1,19 @@
+---
+import { demoSamples } from '../lib/demo-samples';
+---
+<div class="demo-samples" aria-labelledby="sample-heading">
+  <h3 id="sample-heading">Try a sample</h3>
+  <p class="hint">Fill the input, then generate a draft. Selecting a sample never pays.</p>
+  <div class="sample-buttons">{demoSamples.map(sample => <button type="button" class="secondary sample-button" data-intent={sample.intent} data-hint={sample.hint}><strong>{sample.title}</strong><span>{sample.hint}</span></button>)}</div>
+  <p id="sample-status" class="hint" aria-live="polite"></p>
+  <noscript><p class="hint">JavaScript is needed to fill samples with one click. You can still type an intent and use every server form.</p></noscript>
+</div>
+<script>
+  document.querySelectorAll<HTMLButtonElement>('.sample-button').forEach(button => button.addEventListener('click', () => {
+    const input = document.querySelector<HTMLTextAreaElement>('#intent');
+    const status = document.querySelector<HTMLElement>('#sample-status');
+    if (!input) return;
+    input.value = button.dataset.intent ?? ''; input.focus();
+    if (status) status.textContent = `${button.dataset.hint} Generate draft only when ready.`;
+  }));
+</script>

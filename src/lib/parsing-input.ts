@@ -88,7 +88,9 @@ export function groundResult(result: ParseResult, input: ParsingInput, extractio
     if (/\bcurrency\b|币种|货币/i.test(ambiguity)) fields.push('currency');
     // An absent optional email is a valid draft condition, not a missing recipient.
     const optionalEmail = !draft.payee.email && /\bemail\b|邮箱|邮件地址/i.test(ambiguity) && /unknown|not (?:provided|supplied|known)|missing|absent|left empty|未提供|未知|缺少|空/i.test(ambiguity) && !fields.length;
-    if (!optionalEmail && /\b(?:payee|recipient)\b|收款/i.test(ambiguity)) fields.push('payee');
+    // A grounded email also identifies a payee whose optional display name is absent.
+    const optionalName = !!draft.payee.email && !draft.payee.name && /\b(?:display\s+)?name\b|姓名|名称/i.test(ambiguity) && /unknown|not (?:provided|supplied|known)|missing|absent|left empty|未提供|未知|缺少|空/i.test(ambiguity) && !/\b(?:ambiguous|conflicting|uncertain|multiple|unverified)\b|歧义|冲突|不确定|多个/i.test(ambiguity) && !fields.length;
+    if (!optionalEmail && !optionalName && /\b(?:payee|recipient)\b|收款/i.test(ambiguity)) fields.push('payee');
     if (fields.length) { requiredAmbiguities.push(ambiguity); ambiguousFields.push(...fields); }
   }
   if (ambiguousFields.length) return { kind: 'clarification', question: requiredAmbiguities.join(' '), missing_fields: [...new Set(ambiguousFields)], injection_flags: merged };

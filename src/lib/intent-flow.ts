@@ -1,7 +1,7 @@
 import { AppError, applicationError } from './errors';
 import { validateDraft } from './schema';
 import { validatedInput } from './parsing-input';
-import { enforcePaymentPolicy } from './payment-policy';
+import { enforcePaymentPolicy, enforcePayeePolicy } from './payment-policy';
 import { approvalUrl, finishApprovedOrder, readOrderStatus, signSubmittedOrder, verifiedSubmission } from './flow';
 import type { PaymentCap } from './payment-policy';
 import type { Draft, ParseResult, ParsingInput } from './draft-types';
@@ -12,7 +12,7 @@ export type DraftEdits = Pick<Draft, 'payee' | 'items' | 'currency' | 'total' | 
 export interface IntentDependencies {
   store: DraftStore; parse: (input: ParsingInput) => Promise<ParseResult>;
   paypal: PayPalService; paypalConfig: PayPalConfiguration; cap: () => PaymentCap;
-  forbiddenValues?: string[]; now?: () => string;
+  payees?: () => readonly string[]; forbiddenValues?: string[]; now?: () => string;
 }
 export class IntentFlow {
   private now: () => string;
@@ -98,6 +98,7 @@ export class IntentFlow {
       confirmed = this.candidate(entry, edits);
       enforcePaymentPolicy(confirmed.currency, confirmed.total, this.dependencies.cap());
       if (!confirmed.payee.email) throw new AppError('confirmation', 'PAYEE_EMAIL_REQUIRED', 'Fill the actual sandbox merchant email on the card before confirming.', 422);
+      enforcePayeePolicy(confirmed.payee.email, this.dependencies.payees?.() ?? []);
       const description = confirmed.note || confirmed.items.map(item => item.name).join('; ');
       if (!description || new TextEncoder().encode(description).length > 127) throw new AppError('confirmation', 'INVALID_DESCRIPTION', 'Use a note or item summary of 1–127 UTF-8 bytes for the PayPal purpose.', 422);
       submission = { reference: entry.id, payeeEmail: confirmed.payee.email.toLowerCase(), amount: confirmed.total.toFixed(2), currency: 'USD', description };

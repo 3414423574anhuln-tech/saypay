@@ -2,6 +2,7 @@
 import Layout from '../components/Layout.astro';
 import ConfirmationCard from '../components/ConfirmationCard.astro';
 import AuditTrail from '../components/AuditTrail.astro';
+import DemoSamples from '../components/DemoSamples.astro';
 import '../styles/w2.css';
 import '../styles/w3.css';
 import { AppError, applicationError } from '../lib/errors';
@@ -57,7 +58,7 @@ const visibleError = error || queryError;
 ---
 <Layout title="Review a payment intent">
   <div class="workspace">
-    <p class="eyebrow">W3 · review and sandbox execution</p><h1>Say it. Review it. Pay it.</h1>
+    <p class="eyebrow">Review first · PayPal sandbox only</p><h1>Say it. Review it. Pay it.</h1>
     <p>Your intent becomes a stored draft. Edit and confirm it, then approve as the sandbox buyer on PayPal.</p>
     {!configured && <p class="notice">AI configuration · LLM_NOT_CONFIGURED: Fill LLM_API_BASE, LLM_API_KEY and LLM_MODEL locally in this checkout’s .env. Do not send values through chat.</p>}
     {visibleError && (!entry?.aiDraft || visibleError.code !== entry.error?.code) && <div role="alert" class="error"><strong>{visibleError.stage} · {visibleError.code}</strong><p>{visibleError.message}</p></div>}
@@ -77,11 +78,11 @@ const visibleError = error || queryError;
         <label for="intent">Intent in English or Chinese</label><textarea id="intent" name="intent" required maxlength="4000" rows="5">{intent}</textarea>
         <p class="hint">Include the recipient, exact amount and currency, purchase and note. An unknown merchant email can be filled on the card.</p>
         <button type="submit" disabled={!configured}>Generate draft only</button>
-      </form></section>}
+      </form><DemoSamples /></section>}
       <p class="hint">Drafts and audit records stay in this browser workspace. Clearing its cookie loses the lookup; a completed payment remains on PayPal.</p>
       <nav class="actions" aria-label="Workspace navigation"><a href="/parse">Start a new intent</a><a href="/">Manual sandbox form</a></nav>
     </div><div class="workspace-result">
-      {entry?.aiDraft && runtime ? <ConfirmationCard entry={entry} cap={runtime.cap} /> : <section><p class="eyebrow">DRAFT — not paid</p><h2>Confirmation card</h2><p>A complete validated draft opens here. Parsing and clarification do not create a PayPal order.</p></section>}
+      {entry?.aiDraft && runtime ? <ConfirmationCard entry={entry} cap={runtime.cap} payees={runtime.payees} /> : <section><p class="eyebrow">DRAFT — not paid</p><h2>Confirmation card</h2><p>A complete validated draft opens here. Parsing and clarification do not create a PayPal order.</p></section>}
     </div></div>
     <AuditTrail page={page} />
   </div>

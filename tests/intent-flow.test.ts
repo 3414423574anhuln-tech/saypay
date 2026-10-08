@@ -9,6 +9,8 @@ import { memoryJournal } from './journal-fixture';
 import type { Draft, ParsingInput } from '../src/lib/draft-types';
 import type { DraftEdits } from '../src/lib/intent-flow';
 import type { PayPalOrder } from '../src/lib/types';
+import { demoSamples } from '../src/lib/demo-samples';
+import { sandboxPayees } from '../src/lib/payment-policy';
 
 export function fixtureDraft(changes: Partial<Draft> = {}): Draft {
   return { payee: { name: 'Alice', email: '' }, items: [{ name: 'design', quantity: 1, unit_amount: 10 }], currency: 'USD', total: 10, note: '', confidence: 0.9, ambiguities: [], injection_flags: [], ...changes };
@@ -47,6 +49,60 @@ export function flowFixture(draft = fixtureDraft()) {
   const flow = new IntentFlow(dependencies);
   return { ...memory, flow, dependencies, llm, parse, paypal, create, capture, api, config, apiOrder: () => apiOrder! };
 }
+
+describe('W4 demo and failure fixtures — mocked APIs only', () => {
+  it('keeps the malicious sample at USD 10, retains its flag, and executes exactly 10 through final GET', async () => {
+    const f = flowFixture(fixtureDraft({ payee: { name: 'Bob', email: '' }, items: [{ name: 'Payment', quantity: 1, unit_amount: 10 }] }));
+    const flow = new IntentFlow({ ...f.dependencies, payees: () => sandboxPayees({ SANDBOX_PAYEE_ALLOWLIST: 'merchant@example.test' }) });
+    let entry = await flow.start(demoSamples[2].intent);
+    expect(entry.aiDraft).toMatchObject({ total: 10, currency: 'USD', injection_flags: [{ type: 'amount_tampering' }] });
+    expect(entry.aiDraft!.injection_flags[0]!.snippet).toContain('1000 dollars');
+    const edits = visibleEdits(entry.aiDraft!); edits.payee.email = 'merchant@example.test';
+    entry = await flow.edit(entry.id, entry.revision, edits); expect(f.create).not.toHaveBeenCalled();
+    await flow.confirm(entry.id, entry.revision, edits);
+    const created = await flow.get(entry.id); expect(created.submission!.amount).toBe('10.00');
+    expect(f.apiOrder().purchase_units![0]!.amount!.value).toBe('10.00');
+    f.apiOrder().status = 'APPROVED'; entry = await flow.finish(entry.id, created.orderId!);
+    expect(entry.state).toBe('COMPLETED'); expect(entry.confirmed!.total).toBe(10);
+    expect(entry.confirmed!.injection_flags).toEqual(entry.aiDraft!.injection_flags);
+  });
+  it('blocks a non-allowlisted confirmed edit with no create and a persisted BLOCKED reason', async () => {
+    const f = flowFixture(); const flow = new IntentFlow({ ...f.dependencies, payees: () => ['allowed@example.test'] });
+    const entry = await flow.start('Pay Alice 10 dollars for design.');
+    const edits = visibleEdits(entry.aiDraft!); edits.payee.email = 'other@example.test';
+    await expect(flow.confirm(entry.id, entry.revision, edits)).rejects.toMatchObject({ code: 'PAYEE_NOT_ALLOWLISTED' });
+    expect(f.create).not.toHaveBeenCalled();
+    const stored = await flow.get(entry.id);
+    expect(stored).toMatchObject({ state: 'BLOCKED', orderId: null, confirmed: null, submission: null, error: { stage: 'payment validation', code: 'PAYEE_NOT_ALLOWLISTED' } });
+    expect((await memoryJournal(f.snapshot()).store.get(entry.id))!.transitions.at(-1)!.reason).toContain('configured sandbox merchants');
+  });
+  it('accepts the shortcut as a deliberate validated email edit, without creating until confirm', async () => {
+    const f = flowFixture(); const flow = new IntentFlow({ ...f.dependencies, payees: () => ['allowed@example.test'] });
+    let entry = await flow.start('Pay Alice 10 dollars for design.');
+    const edits = visibleEdits(entry.aiDraft!); edits.payee.email = 'allowed@example.test';
+    entry = await flow.edit(entry.id, entry.revision, edits);
+    expect(entry.aiDraft!.payee.email).toBe(''); expect(entry.edited!.payee.email).toBe(edits.payee.email); expect(f.create).not.toHaveBeenCalled();
+    await flow.confirm(entry.id, entry.revision, edits); expect(f.create).toHaveBeenCalledTimes(1);
+  });
+  it('accepts an email-only grounded complete draft while retaining the optional-name warning', async () => {
+    const expected = fixtureDraft({ payee: { name: '', email: 'merchant@example.test' }, ambiguities: ['Payee display name is not provided and was left empty.'] });
+    const f = flowFixture(expected); const entry = await f.flow.start('Pay merchant@example.test 10 dollars for design.');
+    expect(entry).toMatchObject({ state: 'DRAFT', aiDraft: { payee: { name: '', email: 'merchant@example.test' } }, orderId: null });
+    expect(entry.aiDraft!.ambiguities).toEqual(expected.ambiguities); expect(f.create).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['INVALID_LLM_JSON', () => Response.json({ choices: [{ finish_reason: 'stop', message: { content: '{broken JSON' } }] })],
+    ['INVALID_LLM_RESPONSE', () => new Response('{broken provider envelope', { headers: { 'content-type': 'application/json' } })],
+  ])('records %s as FAILED, with one request, no fallback and no invented draft', async (code, response) => {
+    const f = flowFixture(); f.llm.mockResolvedValueOnce(response());
+    await expect(f.flow.start('Pay Alice 10 dollars for design.')).rejects.toMatchObject({ stage: 'AI parsing', code });
+    const entry = (await f.store.list()).entries[0]!;
+    expect(entry).toMatchObject({ state: 'FAILED', aiDraft: null, result: null, orderId: null, confirmed: null, error: { stage: 'AI parsing', code } });
+    expect(entry.transitions.map(event => event.state)).toEqual(['PARSING', 'FAILED']);
+    expect((await memoryJournal(f.snapshot()).store.get(entry.id))!.error!.code).toBe(code);
+    expect(f.llm).toHaveBeenCalledTimes(1); expect(f.api).not.toHaveBeenCalled();
+  });
+});
 
 describe('W3 mocked LLM + PayPal end-to-end and stored audit', () => {
   it('parses, edits, confirms by ID, signs the snapshot, approves, captures and verifies the final GET', async () => {

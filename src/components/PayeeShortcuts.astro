@@ -1,0 +1,18 @@
+---
+interface Props { payees: readonly string[] }
+const { payees } = Astro.props;
+---
+{payees.length > 0 && <div class="payee-shortcuts">
+  <p class="hint">Sandbox payee shortcuts — fills this email and validates edits only; it never confirms payment.</p>
+  <div class="actions">{payees.map((email, i) => <button type="button" class="secondary payee-shortcut" data-email={email} aria-label={`Use sandbox merchant ${i + 1}: ${email}`}>Use sandbox merchant {i + 1}</button>)}</div>
+  <noscript><p class="hint">Available sandbox emails: {payees.join(', ')}. Fill the email above and validate edits.</p></noscript>
+</div>}
+<script>
+  document.querySelectorAll<HTMLButtonElement>('.payee-shortcut').forEach(button => button.addEventListener('click', () => {
+    const form = button.closest('form');
+    const email = form?.querySelector<HTMLInputElement>('[name="payeeEmail"]');
+    const validate = form?.querySelector<HTMLButtonElement>('[formaction="/workspace/edit"]');
+    if (!form || !email || !validate) return;
+    email.value = button.dataset.email ?? ''; form.requestSubmit(validate);
+  }));
+</script>

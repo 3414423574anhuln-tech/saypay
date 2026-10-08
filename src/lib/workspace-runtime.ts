@@ -4,7 +4,7 @@ import { AppError } from './errors';
 import { configuration } from './config';
 import { PayPal } from './paypal';
 import { llmConfiguration, parseIntent } from './llm';
-import { paymentCap } from './payment-policy';
+import { paymentCap, sandboxPayees } from './payment-policy';
 import { IntentFlow } from './intent-flow';
 import type { DraftStore, StoreResult } from './journal-types';
 
@@ -26,7 +26,8 @@ export function workspaceRuntime(cookies: AstroCookies, url: URL) {
   const config = configuration(values);
   const llm = llmConfiguration(values);
   const cap = () => paymentCap(values);
+  const payees = () => sandboxPayees(values);
   const paypal = new PayPal(config, undefined, undefined, { returnPath: '/workspace/return', cancelPath: '/workspace/cancel', draftReference: true });
-  const flow = new IntentFlow({ store, parse: input => parseIntent(input, llm), paypal, paypalConfig: config, cap, forbiddenValues: [config.clientId, config.clientSecret, llm.key] });
-  return { flow, store, cap, appOrigin: config.appUrl, configured: !!llm.base && !!llm.key && !!llm.model };
+  const flow = new IntentFlow({ store, parse: input => parseIntent(input, llm), paypal, paypalConfig: config, cap, payees, forbiddenValues: [config.clientId, config.clientSecret, llm.key] });
+  return { flow, store, cap, payees, appOrigin: config.appUrl, configured: !!llm.base && !!llm.key && !!llm.model };
 }

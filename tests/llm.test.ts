@@ -65,6 +65,11 @@ describe('W2 parser — mocked LLM evidence only', () => {
   it('clarifies the specific required field named by a remaining ambiguity', async () => {
     expect(await parseIntent({ intent: english, answers: [] }, config, mock(envelope(draft({ ambiguities: ['The amount is ambiguous.'] }))))).toMatchObject({ kind: 'clarification', missing_fields: ['amount'] });
   });
+  it('does not treat conflicting recipient identity as merely an absent optional display name', async () => {
+    const value = draft({ payee: { name: '', email: 'merchant@example.test' }, note: '', ambiguities: ['Payee identity is ambiguous and the display name is unknown.'] });
+    const result = await parseIntent({ intent: 'Pay merchant@example.test 25 dollars for avatar design.', answers: [] }, config, mock(envelope(value)));
+    expect(result).toMatchObject({ kind: 'clarification', missing_fields: ['payee'] });
+  });
   it('converts a falsely exact vague amount to clarification', async () => {
     const result = await parseIntent({ intent: 'Pay Bob about 10 dollars.', answers: [] }, config, mock(envelope(draft({ payee: { name: 'Bob', email: '' }, items: [{ name: 'Payment', quantity: 1, unit_amount: 10 }], total: 10, note: '' }))));
     expect(result).toMatchObject({ kind: 'clarification', missing_fields: ['amount'] });
