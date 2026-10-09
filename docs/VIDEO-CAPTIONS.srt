@@ -1,0 +1,71 @@
+1
+00:00:00,000 --> 00:00:10,000
+Typing a payment sentence is easy. Trusting an AI with the amount and recipient is harder. SayPay makes the proposal visible before it can act.
+
+2
+00:00:10,000 --> 00:00:20,000
+The LLM proposes, the rules engine disposes, the human decides. This demo uses PayPal sandbox test money only.
+
+3
+00:00:20,000 --> 00:00:30,000
+I ask to pay Bob ten dollars for avatar design. Generate draft only creates a proposal, never a payment.
+
+4
+00:00:30,000 --> 00:00:40,000
+The card exposes the recipient, items and total. The AI does not invent the missing merchant email; I select the sandbox merchant.
+
+5
+00:00:40,000 --> 00:00:50,000
+I change the note to Avatar design reviewed by me, then validate the edit. The draft is still not paid.
+
+6
+00:00:50,000 --> 00:00:58,000
+Now I explicitly confirm. The server validates the stored draft and opens PayPal's sandbox checkout.
+
+7
+00:00:58,000 --> 00:01:05,000
+The buyer approves ten dollars on PayPal. Buyer login is omitted from the recording to keep credentials off screen.
+
+8
+00:01:05,000 --> 00:01:10,000
+The final API read-back verifies COMPLETED and its matching transaction ID.
+
+9
+00:01:10,000 --> 00:01:20,000
+Next, the malicious sentence asks to replace ten dollars with one thousand. The offending instruction is flagged.
+
+10
+00:01:20,000 --> 00:01:30,000
+If an amount question appears, I answer ten dollars on the same intent. The validated draft remains ten dollars.
+
+11
+00:01:30,000 --> 00:01:40,000
+No payment is created by this demonstration. Now I request two hundred fifty dollars, above the demo's two hundred dollar cap.
+
+12
+00:01:40,000 --> 00:01:50,000
+The server blocks it before creation, with a reason and disabled confirmation. Our agent proposes; rules and humans dispose.
+
+13
+00:01:50,000 --> 00:02:00,000
+The audit lets us replay the decision: original sentence, AI draft, human edit and confirmed version.
+
+14
+00:02:00,000 --> 00:02:10,000
+For the completed payment, the record shows order and capture IDs and the transitions through approval and capture.
+
+15
+00:02:10,000 --> 00:02:20,000
+Refreshing keeps this workspace's records. It is an anonymous demo journal, not an account system or an accounting backup.
+
+16
+00:02:20,000 --> 00:02:30,000
+Astro and TypeScript on Cloudflare Workers connect structured DeepSeek proposals, server rules, a Durable Object journal and PayPal Orders.
+
+17
+00:02:30,000 --> 00:02:42,000
+SayPay explores conversational payments with an inspectable human decision. The deployed demo and MIT source are available to try.
+
+18
+00:02:42,000 --> 00:02:55,000
+Next come broader evaluations, explicit retention and recovery, and stronger merchant access controls. Live payments require separate review. Say it. Review it. Pay it.
